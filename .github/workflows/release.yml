@@ -132,13 +132,19 @@ jobs:
             libayatana-appindicator \
             openssl \
             gtk3 \
-            hicolor-icon-theme
+            hicolor-icon-theme \
+            xdg-utils \
+            file \
+            patchelf \
+            zstd
 
       - name: Install npm dependencies
         run: npm ci
 
-      - name: Build frontend & Tauri binary
-        run: npm run tauri build
+      - name: Build frontend & compile release binary
+        run: |
+          npm run build
+          cargo build --release --manifest-path src-tauri/Cargo.toml
 
       - name: Assemble Arch Linux .pkg.tar.zst
         run: |
@@ -153,9 +159,29 @@ jobs:
           cp src-tauri/icons/128x128.png /tmp/pkg-build/pkg/usr/share/icons/hicolor/128x128/apps/instagram-desktop.png
           cp src-tauri/icons/32x32.png /tmp/pkg-build/pkg/usr/share/icons/hicolor/32x32/apps/instagram-desktop.png
 
-          mkdir -p arch-artifacts
-          cd /tmp/pkg-build
-          tar -C pkg -c -I 'zstd -19 -T0' -f /__w/instagram-next/instagram-next/arch-artifacts/instagram-desktop-1.0.0-1-x86_64.pkg.tar.zst .
+          # Generate Arch Linux package metadata (.PKGINFO)
+          PKG_SIZE=$(du -sb /tmp/pkg-build/pkg | awk '{print $1}')
+          BUILD_DATE=$(date +%s)
+          cat << EOF > /tmp/pkg-build/pkg/.PKGINFO
+pkgname = instagram-desktop
+pkgver = 1.0.0-1
+pkgdesc = Official Instagram Web Desktop Client with Native Notifications
+url = https://github.com/rootLocalGhost/Instagram-Next
+builddate = ${BUILD_DATE}
+packager = localghost
+size = ${PKG_SIZE}
+arch = x86_64
+license = MIT
+depend = webkit2gtk-4.1
+depend = libayatana-appindicator
+depend = gtk3
+depend = openssl
+depend = hicolor-icon-theme
+EOF
+
+          mkdir -p "${GITHUB_WORKSPACE}/arch-artifacts"
+          cd /tmp/pkg-build/pkg
+          tar -c -I 'zstd -19 -T0' -f "${GITHUB_WORKSPACE}/arch-artifacts/instagram-desktop-1.0.0-1-x86_64.pkg.tar.zst" .
 
       - name: Upload Arch artifact
         uses: actions/upload-artifact@v4
