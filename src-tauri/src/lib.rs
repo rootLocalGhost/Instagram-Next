@@ -212,12 +212,14 @@ pub fn run() {
                     "open" => {
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.show();
+                            let _ = window.unminimize();
                             let _ = window.set_focus();
                         }
                     }
                     "dms" => {
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.show();
+                            let _ = window.unminimize();
                             let _ = window.set_focus();
                         }
                         let _ = navigate_instagram(app.clone(), "/direct/inbox/".to_string());
@@ -251,6 +253,7 @@ pub fn run() {
                                     let _ = window.hide();
                                 } else {
                                     let _ = window.show();
+                                    let _ = window.unminimize();
                                     let _ = window.set_focus();
                                 }
                             }
@@ -283,16 +286,25 @@ pub fn run() {
                     Ok(child_webview) => {
                         let webview_clone = child_webview.clone();
                         let scale_clone = scale_factor;
+                        let main_win_clone = main_window.clone();
 
-                        // Listen for window resize to adjust child webview size dynamically
+                        // Listen for window close and resize events
                         main_window.on_window_event(move |event| {
-                            if let tauri::WindowEvent::Resized(new_size) = event {
-                                let new_width_logical = new_size.width as f64 / scale_clone;
-                                let new_height_logical = (new_size.height as f64 / scale_clone) - 44.0;
-                                let _ = webview_clone.set_size(tauri::LogicalSize::new(
-                                    new_width_logical,
-                                    new_height_logical.max(100.0),
-                                ));
+                            match event {
+                                tauri::WindowEvent::CloseRequested { api, .. } => {
+                                    // Prevent window destruction and hide to system tray
+                                    api.prevent_close();
+                                    let _ = main_win_clone.hide();
+                                }
+                                tauri::WindowEvent::Resized(new_size) => {
+                                    let new_width_logical = new_size.width as f64 / scale_clone;
+                                    let new_height_logical = (new_size.height as f64 / scale_clone) - 44.0;
+                                    let _ = webview_clone.set_size(tauri::LogicalSize::new(
+                                        new_width_logical,
+                                        new_height_logical.max(100.0),
+                                    ));
+                                }
+                                _ => {}
                             }
                         });
                     }
