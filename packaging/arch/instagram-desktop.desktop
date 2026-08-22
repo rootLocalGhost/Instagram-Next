@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Instagram
+Comment=Official Instagram Web Desktop Client with Native Notifications
+Exec=instagram-desktop %U
+Icon=instagram-desktop
+Terminal=false
+Type=Application
+Categories=Network;InstantMessaging;Chat;Social;
+StartupWMClass=instagram-desktop
+MimeType=x-scheme-handler/instagram;
+Keywords=Instagram;Social;Photos;Direct;Messages;Reels;
