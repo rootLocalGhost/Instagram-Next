@@ -1,0 +1,79 @@
+/* Design Tokens & Theme Variables */
+:root {
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  
+  /* Instagram Signature Gradient */
+  --ig-grad-1: #f09433;
+  --ig-grad-2: #e6683c;
+  --ig-grad-3: #dc2743;
+  --ig-grad-4: #cc2366;
+  --ig-grad-5: #bc1888;
+  --accent-gradient-start: #e6683c;
+  --accent-gradient-end: #cc2366;
+  --accent-border: rgba(220, 39, 67, 0.3);
+
+  /* Dark theme defaults */
+  --bg-app: #000000;
+  --bg-titlebar: rgba(18, 18, 18, 0.88);
+  --bg-card: #181818;
+  --card-inner-bg: #222222;
+  --border-color: rgba(255, 255, 255, 0.1);
+  --text-primary: #f5f5f5;
+  --text-secondary: #a8a8a8;
+  --btn-group-bg: rgba(255, 255, 255, 0.08);
+  --btn-hover-bg: rgba(255, 255, 255, 0.14);
+  --btn-active-bg: rgba(220, 39, 67, 0.2);
+}
+
+[data-theme="light"] {
+  --bg-app: #fafafa;
+  --bg-titlebar: rgba(255, 255, 255, 0.9);
+  --bg-card: #ffffff;
+  --card-inner-bg: #f5f5f5;
+  --border-color: rgba(0, 0, 0, 0.1);
+  --text-primary: #262626;
+  --text-secondary: #737373;
+  --btn-group-bg: rgba(0, 0, 0, 0.05);
+  --btn-hover-bg: rgba(0, 0, 0, 0.09);
+  --btn-active-bg: rgba(220, 39, 67, 0.15);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-family);
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#root {
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  position: relative;
+  overflow: hidden;
+  background-color: var(--bg-app);
+}
+
+.webview-placeholder {
+  flex: 1;
+  width: 100%;
+  height: calc(100vh - 44px);
+  background-color: var(--bg-app);
+  position: relative;
+}
