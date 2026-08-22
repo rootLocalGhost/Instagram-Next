@@ -1,8 +1,18 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
+  "description": "Default capabilities for Instagram Desktop",
+  "local": true,
+  "remote": {
+    "urls": [
+      "https://*.instagram.com/*",
+      "https://instagram.com/*",
+      "https://*.cdninstagram.com/*",
+      "https://*.fbcdn.net/*"
+    ]
+  },
   "windows": ["main", "*"],
+  "webviews": ["main", "instagram", "*"],
   "permissions": [
     "core:default",
     "core:window:default",
@@ -15,15 +25,21 @@
     "core:window:allow-show",
     "core:window:allow-hide",
     "core:window:allow-set-focus",
+    "core:window:allow-is-maximized",
     "core:window:allow-start-dragging",
     "core:webview:default",
     "core:webview:allow-set-webview-zoom",
     "opener:default",
+    "opener:allow-open-url",
     "notification:default",
     "notification:allow-is-permission-granted",
     "notification:allow-request-permission",
     "notification:allow-notify",
     "notification:allow-show",
+    "autostart:default",
+    "autostart:allow-enable",
+    "autostart:allow-disable",
+    "autostart:allow-is-enabled",
     "store:default"
   ]
 }

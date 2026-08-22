@@ -1,6 +1,7 @@
 import { Component, createSignal, onMount, onCleanup, createEffect } from 'solid-js';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
+import { enable as enableAutostart, disable as disableAutostart, isEnabled as isAutostartEnabled } from '@tauri-apps/plugin-autostart';
 import { TitleBar } from './components/TitleBar';
 import { SettingsModal } from './components/SettingsModal';
 import { NotificationDrawer } from './components/NotificationDrawer';
@@ -12,6 +13,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   enableSound: true,
   enablePreviews: true,
   alertOnBadgeIncrease: true,
+  startOnBoot: false,
   closeToTray: true,
   minimizeToTray: false,
   alwaysOnTop: false,
@@ -29,8 +31,7 @@ const App: Component = () => {
   const [isNotificationsOpen, setIsNotificationsOpen] = createSignal(false);
   const [notifications, setNotifications] = createSignal<InterceptedNotification[]>([]);
 
-  // Load settings from storage
-  const [settings, setSettings] = createSignal<AppSettings>(() => {
+  const getInitialSettings = (): AppSettings => {
     try {
       const saved = localStorage.getItem('ig_desktop_settings');
       if (saved) {
@@ -40,7 +41,10 @@ const App: Component = () => {
       console.warn('Failed to load settings from localStorage:', e);
     }
     return DEFAULT_SETTINGS;
-  });
+  };
+
+  // Load settings from storage
+  const [settings, setSettings] = createSignal<AppSettings>(getInitialSettings());
 
   // Apply theme effect
   createEffect(() => {
@@ -54,24 +58,58 @@ const App: Component = () => {
   });
 
   // Save settings when changed
-  const updateSettings = (partial: Partial<AppSettings>) => {
-    setSettings(prev => {
-      const next = { ...prev, ...partial };
-      try {
-        localStorage.setItem('ig_desktop_settings', JSON.stringify(next));
-      } catch (e) {
-        console.warn('Failed to save settings to localStorage:', e);
-      }
-      return next;
-    });
+  const updateSettings = async (partial: Partial<AppSettings>) => {
+    const next = { ...settings(), ...partial };
+    setSettings(next);
+
+    try {
+      localStorage.setItem('ig_desktop_settings', JSON.stringify(next));
+    } catch (e) {
+      console.warn('Failed to save settings to localStorage:', e);
+    }
 
     if (partial.alwaysOnTop !== undefined) {
-      invoke('set_always_on_top', { enabled: partial.alwaysOnTop });
+      invoke('set_always_on_top', { enabled: partial.alwaysOnTop }).catch(console.warn);
+    }
+
+    if (partial.closeToTray !== undefined) {
+      invoke('set_close_to_tray', { enabled: partial.closeToTray }).catch(console.warn);
+    }
+
+    if (partial.enableNativeNotifications !== undefined) {
+      invoke('set_notifications_enabled', { enabled: partial.enableNativeNotifications }).catch(console.warn);
+    }
+
+    if (partial.startOnBoot !== undefined) {
+      try {
+        if (partial.startOnBoot) {
+          await enableAutostart();
+        } else {
+          await disableAutostart();
+        }
+      } catch (e) {
+        console.warn('Autostart toggle error:', e);
+      }
     }
   };
 
   onMount(async () => {
     const unlisteners: UnlistenFn[] = [];
+
+    // Sync autostart status on startup
+    try {
+      const autostartState = await isAutostartEnabled();
+      if (autostartState !== settings().startOnBoot) {
+        setSettings(prev => ({ ...prev, startOnBoot: autostartState }));
+      }
+    } catch (e) {
+      console.warn('Could not check autostart state:', e);
+    }
+
+    // Sync initial Rust settings
+    invoke('set_close_to_tray', { enabled: settings().closeToTray }).catch(console.warn);
+    invoke('set_notifications_enabled', { enabled: settings().enableNativeNotifications }).catch(console.warn);
+    invoke('set_always_on_top', { enabled: settings().alwaysOnTop }).catch(console.warn);
 
     try {
       // 1. Listen for notification events from Rust / Injected script
@@ -204,8 +242,8 @@ const App: Component = () => {
   const handleTestNotification = async () => {
     try {
       await invoke('trigger_native_notification', {
-        title: 'Instagram',
-        body: 'New direct message from friend: "Hey, check out this reel! 🚀"',
+        title: 'Instagram Direct',
+        body: 'New direct message: "Hey, real-time native notifications are working! 🚀"',
         icon: null,
         tag: 'test',
         url: 'https://www.instagram.com/direct/inbox/'

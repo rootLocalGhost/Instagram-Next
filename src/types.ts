@@ -3,6 +3,7 @@ export interface AppSettings {
   enableSound: boolean;
   enablePreviews: boolean;
   alertOnBadgeIncrease: boolean;
+  startOnBoot: boolean;
   closeToTray: boolean;
   minimizeToTray: boolean;
   alwaysOnTop: boolean;

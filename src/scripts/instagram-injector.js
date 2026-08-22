@@ -1,11 +1,13 @@
 /**
- * Instagram Desktop Webview Injected Script
- * Intercepts Web Notifications, ServiceWorker Notifications, DOM Activity & Direct Messages,
- * and bridges them natively to Windows System Notifications via Tauri IPC.
+ * Instagram Desktop Webview Injected Script (Production Grade)
+ * 
+ * Intercepts Web Notifications, ServiceWorker Notifications, Permissions API,
+ * DOM Activity & Direct Messages, and bridges them natively to Windows System Notifications.
+ * Also handles external link routing to default system browser.
  */
 
 (function () {
-  console.log('[Instagram Desktop] Injected script initialized.');
+  console.log('[Instagram Desktop] Initializing Injected Native Bridge...');
 
   // Helper to safely invoke Tauri commands
   function invokeTauri(command, payload = {}) {
@@ -16,17 +18,17 @@
         return window.__TAURI__.core.invoke(command, payload);
       }
     } catch (err) {
-      console.warn('[Instagram Desktop] Tauri IPC invoke failed:', command, err);
+      console.warn('[Instagram Desktop] Tauri IPC invoke error:', command, err);
     }
     return Promise.resolve();
   }
 
   // Helper to send native desktop notification
   function sendNativeNotification(title, body = '', icon = '', tag = '', url = '') {
-    console.log('[Instagram Desktop] Sending native notification:', { title, body, icon, tag, url });
+    console.log('[Instagram Desktop] Triggering native notification:', { title, body, icon, tag, url });
     invokeTauri('trigger_native_notification', {
       title: String(title || 'Instagram'),
-      body: String(body || ''),
+      body: body ? String(body) : null,
       icon: icon ? String(icon) : null,
       tag: tag ? String(tag) : null,
       url: url ? String(url) : window.location.href
@@ -34,26 +36,49 @@
   }
 
   // -------------------------------------------------------------
-  // 1. WEB NOTIFICATION API INTERCEPTION & PERMISSION SPOOFING
+  // 1. NAVIGATOR PERMISSIONS QUERY SPOOFING
+  // -------------------------------------------------------------
+  try {
+    if (navigator.permissions && navigator.permissions.query) {
+      const origQuery = navigator.permissions.query.bind(navigator.permissions);
+      navigator.permissions.query = function (param) {
+        if (param && (param.name === 'notifications' || param.name === 'push')) {
+          return Promise.resolve({
+            state: 'granted',
+            name: param.name,
+            onchange: null,
+            addEventListener: () => {},
+            removeEventListener: () => {},
+            dispatchEvent: () => false
+          });
+        }
+        return origQuery(param);
+      };
+    }
+  } catch (err) {
+    console.warn('[Instagram Desktop] Error spoofing navigator.permissions.query:', err);
+  }
+
+  // -------------------------------------------------------------
+  // 2. WEB NOTIFICATION API INTERCEPTION & PERMISSION SPOOFING
   // -------------------------------------------------------------
   try {
     const OriginalNotification = window.Notification;
 
-    function MockNotification(title, options = {}) {
+    function TauriMockNotification(title, options = {}) {
       const opt = options || {};
-      sendNativeNotification(
-        title,
-        opt.body || '',
-        opt.icon || '',
-        opt.tag || '',
-        opt.data && opt.data.url ? opt.data.url : ''
-      );
+      const body = opt.body || '';
+      const icon = opt.icon || '';
+      const tag = opt.tag || '';
+      const url = (opt.data && opt.data.url) ? opt.data.url : window.location.href;
+
+      sendNativeNotification(title, body, icon, tag, url);
 
       const instance = {
         title: title,
-        body: opt.body || '',
-        icon: opt.icon || '',
-        tag: opt.tag || '',
+        body: body,
+        icon: icon,
+        tag: tag,
         data: opt.data || null,
         onclick: null,
         onclose: null,
@@ -78,47 +103,56 @@
       return instance;
     }
 
-    // Force permission to always be granted
-    Object.defineProperty(MockNotification, 'permission', {
+    Object.defineProperty(TauriMockNotification, 'permission', {
       get: () => 'granted',
       set: () => {},
       configurable: true
     });
 
-    MockNotification.requestPermission = async function (callback) {
+    TauriMockNotification.requestPermission = async function (callback) {
       if (typeof callback === 'function') {
         callback('granted');
       }
-      return 'granted';
+      return Promise.resolve('granted');
     };
 
-    MockNotification.maxActions = 2;
+    TauriMockNotification.maxActions = 2;
 
-    window.Notification = MockNotification;
-    console.log('[Instagram Desktop] window.Notification shim installed.');
+    try {
+      Object.defineProperty(window, 'Notification', {
+        get: () => TauriMockNotification,
+        set: () => {},
+        configurable: true
+      });
+    } catch (e) {
+      window.Notification = TauriMockNotification;
+    }
+    console.log('[Instagram Desktop] window.Notification proxy installed.');
   } catch (err) {
     console.error('[Instagram Desktop] Error shimming Notification:', err);
   }
 
   // -------------------------------------------------------------
-  // 2. SERVICE WORKER NOTIFICATION SHIM
+  // 3. SERVICE WORKER NOTIFICATION SHIM
   // -------------------------------------------------------------
   try {
-    if ('ServiceWorkerRegistration' in window && window.ServiceWorkerRegistration.prototype) {
-      const originalShowNotification = window.ServiceWorkerRegistration.prototype.showNotification;
-      window.ServiceWorkerRegistration.prototype.showNotification = function (title, options = {}) {
+    if (typeof ServiceWorkerRegistration !== 'undefined' && ServiceWorkerRegistration.prototype) {
+      const originalShowNotification = ServiceWorkerRegistration.prototype.showNotification;
+      ServiceWorkerRegistration.prototype.showNotification = function (title, options = {}) {
         const opt = options || {};
-        sendNativeNotification(
-          title,
-          opt.body || '',
-          opt.icon || '',
-          opt.tag || '',
-          opt.data && opt.data.url ? opt.data.url : ''
-        );
-        if (originalShowNotification) {
+        const body = opt.body || '';
+        const icon = opt.icon || '';
+        const tag = opt.tag || '';
+        const url = (opt.data && opt.data.url) ? opt.data.url : window.location.href;
+
+        sendNativeNotification(title, body, icon, tag, url);
+
+        if (typeof originalShowNotification === 'function') {
           try {
-            return originalShowNotification.apply(this, arguments);
-          } catch (e) {}
+            return originalShowNotification.call(this, title, options);
+          } catch (e) {
+            return Promise.resolve();
+          }
         }
         return Promise.resolve();
       };
@@ -128,14 +162,14 @@
   }
 
   // -------------------------------------------------------------
-  // 3. UNREAD COUNT & TITLE MUTATION OBSERVER
+  // 4. UNREAD COUNT & TITLE MUTATION OBSERVER
   // -------------------------------------------------------------
   let lastUnreadCount = 0;
   let lastTitle = document.title;
 
   function parseUnreadFromTitle(title) {
-    // Format is usually "(1) Instagram" or "(12) Messages • Instagram"
-    const match = title.match(/^\((\d+)\)/);
+    // Matches patterns like "(1) Instagram", "(12) Messages • Instagram", or "(3) Direct"
+    const match = (title || '').match(/^\((\d+)\)/);
     if (match && match[1]) {
       return parseInt(match[1], 10);
     }
@@ -143,7 +177,7 @@
   }
 
   function handleTitleChange() {
-    const currentTitle = document.title;
+    const currentTitle = document.title || '';
     if (currentTitle === lastTitle) return;
     lastTitle = currentTitle;
 
@@ -154,9 +188,10 @@
 
       // If count increased, trigger a notification if document is hidden or inactive
       if (count > lastUnreadCount && (document.hidden || !document.hasFocus())) {
+        const diff = count - lastUnreadCount;
         sendNativeNotification(
-          'Instagram',
-          `You have ${count} unread ${count === 1 ? 'notification or message' : 'notifications or messages'}`,
+          'Instagram Direct',
+          `You have ${count} unread ${count === 1 ? 'message' : 'messages'}`,
           null,
           'unread-badge',
           'https://www.instagram.com/direct/inbox/'
@@ -166,38 +201,50 @@
     }
   }
 
-  // Observe title changes via MutationObserver on <title>
   const titleElem = document.querySelector('title');
   if (titleElem) {
     const titleObserver = new MutationObserver(handleTitleChange);
     titleObserver.observe(titleElem, { childList: true, characterData: true, subtree: true });
   }
-
-  // Fallback polling for title
-  setInterval(handleTitleChange, 2000);
+  setInterval(handleTitleChange, 1500);
 
   // -------------------------------------------------------------
-  // 4. DOM MUTATION OBSERVER FOR IN-APP DM TOASTS & BADGES
+  // 5. DOM MUTATION OBSERVER FOR IN-APP DM TOASTS & BADGES
   // -------------------------------------------------------------
   const processedNotifications = new Set();
 
   function scanForInAppNotifications() {
     try {
-      // 1. Check for Direct Message unread indicator badges in sidebar/nav
-      const dmBadge = document.querySelector('a[href*="/direct/"] [aria-label*="unread"], a[href*="/direct/"] span[class*="badge"], a[href*="/direct/"] div[class*="badge"]');
-      if (dmBadge) {
-        const text = dmBadge.textContent || dmBadge.getAttribute('aria-label') || '';
-        const countMatch = text.match(/(\d+)/);
-        if (countMatch) {
-          const count = parseInt(countMatch[1], 10);
-          if (count > 0 && count !== lastUnreadCount) {
-            invokeTauri('update_unread_count', { count });
+      // 1. Check for Direct Message unread indicator badges in navigation
+      const dmBadges = document.querySelectorAll(
+        'a[href*="/direct/"] [aria-label*="unread"], ' +
+        'a[href*="/direct/"] [aria-label*="Unread"], ' +
+        'a[href*="/direct/"] span[class*="badge"], ' +
+        'a[href*="/direct/"] div[class*="badge"], ' +
+        'svg[aria-label*="Direct"][aria-label*="unread"]'
+      );
+      if (dmBadges.length > 0) {
+        for (const dmBadge of dmBadges) {
+          const text = dmBadge.textContent || dmBadge.getAttribute('aria-label') || '';
+          const countMatch = text.match(/(\d+)/);
+          if (countMatch) {
+            const count = parseInt(countMatch[1], 10);
+            if (count > 0 && count !== lastUnreadCount) {
+              invokeTauri('update_unread_count', { count });
+            }
+            break;
           }
         }
       }
 
-      // 2. Check for in-app Toast popups (Instagram pops up toasts at the bottom/top for new DMs)
-      const toastContainers = document.querySelectorAll('div[role="alert"], div[role="dialog"] div[tabindex="-1"], div[data-testid="toast"]');
+      // 2. Check for in-app Toast popups (e.g. "User sent a message", etc.)
+      const toastContainers = document.querySelectorAll(
+        'div[role="alert"], ' +
+        'div[role="dialog"] div[tabindex="-1"], ' +
+        'div[data-testid="toast"], ' +
+        'div[class*="toast"], ' +
+        'div[class*="Toast"]'
+      );
       toastContainers.forEach(toast => {
         const text = (toast.textContent || '').trim();
         if (text && text.length > 3 && !processedNotifications.has(text)) {
@@ -206,7 +253,10 @@
                                      text.includes('liked your') ||
                                      text.includes('commented on') ||
                                      text.includes('started following you') ||
-                                     text.includes('mentioned you');
+                                     text.includes('mentioned you') ||
+                                     text.includes('sent a video') ||
+                                     text.includes('sent a photo') ||
+                                     text.includes('sent an attachment');
 
           if (isNotificationToast) {
             processedNotifications.add(text);
@@ -221,11 +271,10 @@
         }
       });
     } catch (e) {
-      console.warn('[Instagram Desktop] DOM scan error:', e);
+      // DOM scan safety catch
     }
   }
 
-  // Observe body for dynamic popups / toasts
   const bodyObserver = new MutationObserver(() => {
     scanForInAppNotifications();
   });
@@ -239,7 +288,40 @@
   }
 
   // -------------------------------------------------------------
-  // 5. GLOBAL HELPER API FOR DESKTOP APP
+  // 6. EXTERNAL LINK INTERCEPTOR
+  // -------------------------------------------------------------
+  document.addEventListener('click', function (e) {
+    const target = e.target.closest('a');
+    if (!target || !target.href) return;
+
+    const href = target.href;
+    try {
+      const url = new URL(href);
+      const isInternalHost = url.hostname.includes('instagram.com') ||
+                              url.hostname.includes('cdninstagram.com') ||
+                              url.hostname.includes('facebook.com') ||
+                              url.hostname.includes('fbcdn.net');
+
+      // If it's an external link or target="_blank" or instagram redirect (l.instagram.com)
+      if (!isInternalHost || target.target === '_blank' || href.includes('l.instagram.com/')) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        let targetUrl = href;
+        if (href.includes('l.instagram.com') && url.searchParams.has('u')) {
+          targetUrl = decodeURIComponent(url.searchParams.get('u'));
+        }
+
+        console.log('[Instagram Desktop] Routing external link to default browser:', targetUrl);
+        invokeTauri('open_external_url', { url: targetUrl });
+      }
+    } catch (err) {
+      console.warn('[Instagram Desktop] Link routing error:', err);
+    }
+  }, true);
+
+  // -------------------------------------------------------------
+  // 7. GLOBAL HELPER API FOR DESKTOP SHELL
   // -------------------------------------------------------------
   window.__INSTAGRAM_DESKTOP__ = {
     navigate: function (path) {
@@ -264,17 +346,17 @@
       return lastUnreadCount;
     },
     testNotification: function () {
-      sendNativeNotification('Instagram Test', 'This is a test notification from Instagram Desktop!', null, 'test', 'https://www.instagram.com/direct/inbox/');
+      sendNativeNotification('Instagram Direct', 'Test message: "Hey there! Real-time notifications are working! 🚀"', null, 'test', 'https://www.instagram.com/direct/inbox/');
     }
   };
 
   // -------------------------------------------------------------
-  // 6. CUSTOM DESKTOP CSS INJECTION
+  // 8. DESKTOP POLISHING CSS
   // -------------------------------------------------------------
   const style = document.createElement('style');
   style.id = 'instagram-desktop-custom-styles';
   style.textContent = `
-    /* Custom sleek desktop scrollbar */
+    /* Sleek Desktop Scrollbars */
     ::-webkit-scrollbar {
       width: 8px;
       height: 8px;
@@ -292,5 +374,5 @@
   `;
   (document.head || document.documentElement).appendChild(style);
 
-  console.log('[Instagram Desktop] Injected script setup complete.');
+  console.log('[Instagram Desktop] Injected Native Bridge initialized successfully.');
 })();

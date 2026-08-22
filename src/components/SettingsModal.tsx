@@ -62,7 +62,7 @@ export const SettingsModal: Component<SettingsModalProps> = (props) => {
               <div class="settings-row">
                 <div class="settings-info">
                   <span class="setting-label">Play Notification Sound</span>
-                  <span class="setting-desc">Play native system sound when notifications arrive</span>
+                  <span class="setting-desc">Play system sound when new direct messages arrive</span>
                 </div>
                 <label class="switch">
                   <input
@@ -77,7 +77,7 @@ export const SettingsModal: Component<SettingsModalProps> = (props) => {
               <div class="settings-row">
                 <div class="settings-info">
                   <span class="setting-label">Message Previews</span>
-                  <span class="setting-desc">Show sender name and message snippet in toast banner</span>
+                  <span class="setting-desc">Show sender name and message preview in notification banner</span>
                 </div>
                 <label class="switch">
                   <input
@@ -91,8 +91,8 @@ export const SettingsModal: Component<SettingsModalProps> = (props) => {
 
               <div class="settings-row">
                 <div class="settings-info">
-                  <span class="setting-label">Alert on Badge Count Increase</span>
-                  <span class="setting-desc">Send alert when Instagram title/badge unread count increases</span>
+                  <span class="setting-label">Alert on Unread Count Change</span>
+                  <span class="setting-desc">Trigger notification when Instagram unread message counter increases</span>
                 </div>
                 <label class="switch">
                   <input
@@ -119,8 +119,23 @@ export const SettingsModal: Component<SettingsModalProps> = (props) => {
             <div class="settings-group">
               <div class="settings-row">
                 <div class="settings-info">
+                  <span class="setting-label">Start on Windows Boot</span>
+                  <span class="setting-desc">Automatically launch Instagram Desktop minimized in system tray when PC turns on</span>
+                </div>
+                <label class="switch">
+                  <input
+                    type="checkbox"
+                    checked={props.settings.startOnBoot}
+                    onChange={(e) => props.onUpdateSettings({ startOnBoot: e.currentTarget.checked })}
+                  />
+                  <span class="slider" />
+                </label>
+              </div>
+
+              <div class="settings-row">
+                <div class="settings-info">
                   <span class="setting-label">Close to System Tray</span>
-                  <span class="setting-desc">Keep app running in system tray on close so notifications keep arriving</span>
+                  <span class="setting-desc">Keep app running in background tray on close so notifications keep arriving</span>
                 </div>
                 <label class="switch">
                   <input
@@ -150,7 +165,7 @@ export const SettingsModal: Component<SettingsModalProps> = (props) => {
               <div class="settings-row">
                 <div class="settings-info">
                   <span class="setting-label">Always on Top</span>
-                  <span class="setting-desc">Keep Instagram window floating above other applications</span>
+                  <span class="setting-desc">Keep Instagram window floating above other desktop applications</span>
                 </div>
                 <label class="switch">
                   <input
@@ -165,7 +180,7 @@ export const SettingsModal: Component<SettingsModalProps> = (props) => {
               <div class="settings-row">
                 <div class="settings-info">
                   <span class="setting-label">Theme Mode</span>
-                  <span class="setting-desc">Match desktop UI with Windows or Instagram theme</span>
+                  <span class="setting-desc">Match desktop UI styling with system preference</span>
                 </div>
                 <select
                   class="select-control"
@@ -180,7 +195,7 @@ export const SettingsModal: Component<SettingsModalProps> = (props) => {
             </div>
           </div>
 
-          {/* Actions & Maintenance */}
+          {/* Actions & Diagnostics */}
           <div class="settings-section">
             <div class="section-title">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -194,7 +209,7 @@ export const SettingsModal: Component<SettingsModalProps> = (props) => {
               <div class="settings-row">
                 <div class="settings-info">
                   <span class="setting-label">Diagnostic Test</span>
-                  <span class="setting-desc">Verify Windows toast notification dispatch and click handling</span>
+                  <span class="setting-desc">Send test Windows Toast notification to verify system integration</span>
                 </div>
                 <button class="btn-secondary" onClick={props.onTestNotification}>
                   Test Toast

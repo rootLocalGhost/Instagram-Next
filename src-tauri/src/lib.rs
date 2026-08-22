@@ -1,20 +1,32 @@
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use tauri::{
-    menu::{Menu, MenuItem},
+    menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, State,
 };
 use tauri_plugin_notification::NotificationExt;
+use tauri_plugin_opener::OpenerExt;
 
-// Shared app state
-#[derive(Default)]
+// Shared Application Settings & State
 pub struct AppState {
     pub unread_count: Arc<AtomicU32>,
+    pub close_to_tray: Arc<AtomicBool>,
+    pub notifications_enabled: Arc<AtomicBool>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            unread_count: Arc::new(AtomicU32::new(0)),
+            close_to_tray: Arc::new(AtomicBool::new(true)),
+            notifications_enabled: Arc::new(AtomicBool::new(true)),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct NotificationPayload {
     pub title: String,
     pub body: Option<String>,
@@ -27,12 +39,17 @@ pub struct NotificationPayload {
 #[tauri::command]
 fn trigger_native_notification(
     app: AppHandle,
+    state: State<AppState>,
     title: String,
     body: Option<String>,
     icon: Option<String>,
     tag: Option<String>,
     url: Option<String>,
 ) -> Result<(), String> {
+    if !state.notifications_enabled.load(Ordering::Relaxed) {
+        return Ok(());
+    }
+
     let payload = NotificationPayload {
         title: title.clone(),
         body: body.clone(),
@@ -59,7 +76,6 @@ fn trigger_native_notification(
     }
 
     if let Some(ref tag_str) = tag {
-        // Tag grouping in supported notification systems
         builder = builder.extra("tag", tag_str.clone());
     }
 
@@ -67,7 +83,13 @@ fn trigger_native_notification(
         builder = builder.extra("url", target_url.clone());
     }
 
-    builder.show().map_err(|e| e.to_string())?;
+    let _ = builder.show().map_err(|e| e.to_string())?;
+
+    // Bring attention to taskbar / request informational attention
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.request_user_attention(Some(tauri::UserAttentionType::Informational));
+    }
+
     Ok(())
 }
 
@@ -80,6 +102,27 @@ fn update_unread_count(
 ) -> Result<(), String> {
     state.unread_count.store(count, Ordering::SeqCst);
     let _ = app.emit("unread-count-updated", count);
+
+    // Update window title
+    if let Some(window) = app.get_webview_window("main") {
+        let title = if count > 0 {
+            format!("({}) Instagram", count)
+        } else {
+            "Instagram".to_string()
+        };
+        let _ = window.set_title(&title);
+    }
+
+    // Update system tray tooltip
+    if let Some(tray) = app.tray_by_id("main-tray") {
+        let tooltip = if count > 0 {
+            format!("Instagram Desktop - {} unread notification{}", count, if count > 1 { "s" } else { "" })
+        } else {
+            "Instagram Desktop".to_string()
+        };
+        let _ = tray.set_tooltip(Some(tooltip));
+    }
+
     Ok(())
 }
 
@@ -87,6 +130,14 @@ fn update_unread_count(
 #[tauri::command]
 fn get_unread_count(state: State<AppState>) -> Result<u32, String> {
     Ok(state.unread_count.load(Ordering::SeqCst))
+}
+
+// Command: Open external URL in default browser
+#[tauri::command]
+fn open_external_url(app: AppHandle, url: String) -> Result<(), String> {
+    app.opener()
+        .open_url(&url, None::<&str>)
+        .map_err(|e| e.to_string())
 }
 
 // Command: Toggle window always-on-top
@@ -98,15 +149,33 @@ fn set_always_on_top(app: AppHandle, enabled: bool) -> Result<(), String> {
     Ok(())
 }
 
+// Command: Set close to tray state
+#[tauri::command]
+fn set_close_to_tray(state: State<AppState>, enabled: bool) -> Result<(), String> {
+    state.close_to_tray.store(enabled, Ordering::Relaxed);
+    Ok(())
+}
+
+// Command: Set notifications enabled state
+#[tauri::command]
+fn set_notifications_enabled(state: State<AppState>, enabled: bool) -> Result<(), String> {
+    state.notifications_enabled.store(enabled, Ordering::Relaxed);
+    Ok(())
+}
+
+pub fn sanitize_instagram_url(path: &str) -> String {
+    if path.starts_with("http") {
+        path.to_string()
+    } else {
+        let clean = if path.starts_with('/') { &path[1..] } else { path };
+        format!("https://www.instagram.com/{}", clean)
+    }
+}
+
 // Command: Send navigation or action to webview
 #[tauri::command]
 fn navigate_instagram(app: AppHandle, path: String) -> Result<(), String> {
-    let target = if path.starts_with("http") {
-        path
-    } else {
-        let clean = if path.starts_with('/') { &path[1..] } else { &path };
-        format!("https://www.instagram.com/{}", clean)
-    };
+    let target = sanitize_instagram_url(&path);
 
     let js = format!(
         "if (window.__INSTAGRAM_DESKTOP__) {{ window.__INSTAGRAM_DESKTOP__.navigate('{}'); }} else {{ window.location.href = '{}'; }}",
@@ -176,35 +245,53 @@ const DESKTOP_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Appl
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let state = AppState::default();
+    let close_to_tray_ref = Arc::clone(&state.close_to_tray);
+
     tauri::Builder::default()
-        .manage(AppState::default())
+        .manage(state)
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--minimized"]),
+        ))
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
         .invoke_handler(tauri::generate_handler![
             trigger_native_notification,
             update_unread_count,
             get_unread_count,
+            open_external_url,
             set_always_on_top,
+            set_close_to_tray,
+            set_notifications_enabled,
             navigate_instagram,
             reload_instagram,
             go_back_instagram,
             go_forward_instagram,
             set_instagram_zoom
         ])
-        .setup(|app| {
+        .setup(move |app| {
             // Setup System Tray
             let open_item = MenuItem::with_id(app, "open", "Open Instagram", true, None::<&str>)?;
             let dms_item = MenuItem::with_id(app, "dms", "Direct Messages", true, None::<&str>)?;
-            let test_notif_item = MenuItem::with_id(app, "test_notif", "Test Notification", true, None::<&str>)?;
-            let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let test_notif_item = MenuItem::with_id(app, "test_notif", "Send Test Notification", true, None::<&str>)?;
+            let separator = PredefinedMenuItem::separator(app)?;
+            let quit_item = MenuItem::with_id(app, "quit", "Quit Instagram", true, None::<&str>)?;
 
             let tray_menu = Menu::with_items(
                 app,
-                &[&open_item, &dms_item, &test_notif_item, &quit_item],
+                &[&open_item, &dms_item, &test_notif_item, &separator, &quit_item],
             )?;
 
-            let _tray = TrayIconBuilder::new()
+            let _tray = TrayIconBuilder::with_id("main-tray")
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&tray_menu)
                 .tooltip("Instagram Desktop")
@@ -225,9 +312,11 @@ pub fn run() {
                         let _ = navigate_instagram(app.clone(), "/direct/inbox/".to_string());
                     }
                     "test_notif" => {
+                        let state = app.state::<AppState>();
                         let _ = trigger_native_notification(
                             app.clone(),
-                            "Instagram Desktop".to_string(),
+                            state,
+                            "Instagram Direct".to_string(),
                             Some("Windows notifications are active and connected!".to_string()),
                             None,
                             Some("test".to_string()),
@@ -263,7 +352,8 @@ pub fn run() {
                 .build(app)?;
 
             // Setup Instagram Child Webview under the titlebar (y: 44px)
-            if let Some(main_window) = app.get_window("main") {
+            let handle = app.handle();
+            if let Some(main_window) = handle.get_window("main") {
                 let window_size = main_window.inner_size().unwrap_or(tauri::PhysicalSize::new(1180, 840));
                 let scale_factor = main_window.scale_factor().unwrap_or(1.0);
                 let titlebar_height_logical = 44.0;
@@ -292,9 +382,10 @@ pub fn run() {
                         main_window.on_window_event(move |event| {
                             match event {
                                 tauri::WindowEvent::CloseRequested { api, .. } => {
-                                    // Prevent window destruction and hide to system tray
-                                    api.prevent_close();
-                                    let _ = main_win_clone.hide();
+                                    if close_to_tray_ref.load(Ordering::Relaxed) {
+                                        api.prevent_close();
+                                        let _ = main_win_clone.hide();
+                                    }
                                 }
                                 tauri::WindowEvent::Resized(new_size) => {
                                     let new_width_logical = new_size.width as f64 / scale_clone;
@@ -318,4 +409,39 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_app_state() {
+        let state = AppState::default();
+        assert_eq!(state.unread_count.load(Ordering::SeqCst), 0);
+        assert!(state.close_to_tray.load(Ordering::Relaxed));
+        assert!(state.notifications_enabled.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn test_notification_payload_serialization() {
+        let payload = NotificationPayload {
+            title: "Instagram Direct".to_string(),
+            body: Some("Hello from friend".to_string()),
+            icon: None,
+            tag: Some("dm".to_string()),
+            url: Some("https://www.instagram.com/direct/inbox/".to_string()),
+        };
+
+        let json = serde_json::to_string(&payload).unwrap();
+        let deserialized: NotificationPayload = serde_json::from_str(&json).unwrap();
+        assert_eq!(payload, deserialized);
+    }
+
+    #[test]
+    fn test_sanitize_instagram_url() {
+        assert_eq!(sanitize_instagram_url("/direct/inbox/"), "https://www.instagram.com/direct/inbox/");
+        assert_eq!(sanitize_instagram_url("explore/"), "https://www.instagram.com/explore/");
+        assert_eq!(sanitize_instagram_url("https://www.instagram.com/p/123"), "https://www.instagram.com/p/123");
+    }
 }
