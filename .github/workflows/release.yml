@@ -82,7 +82,7 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          mkdir -p artifacts
+          New-Item -ItemType Directory -Path artifacts -Force
           Copy-Item src-tauri/target/release/bundle/nsis/*.exe artifacts/ -ErrorAction SilentlyContinue
           Copy-Item src-tauri/target/release/bundle/msi/*.msi artifacts/ -ErrorAction SilentlyContinue
           
@@ -121,6 +121,8 @@ jobs:
 
       - name: Install Arch dependencies
         run: |
+          pacman-key --init
+          pacman-key --populate archlinux
           pacman -Syu --noconfirm
           pacman -S --needed --noconfirm \
             base-devel \
@@ -148,6 +150,13 @@ jobs:
 
       - name: Assemble Arch Linux .pkg.tar.zst
         run: |
+          # Extract semantic version without leading 'v'
+          RAW_VER="${{ github.ref_name }}"
+          if [ -z "$RAW_VER" ] || [ "$RAW_VER" = "main" ]; then
+            RAW_VER="${{ inputs.version || 'v1.0.1' }}"
+          fi
+          PKG_VER=$(echo "$RAW_VER" | sed 's/^v//')
+
           mkdir -p /tmp/pkg-build/pkg/usr/bin
           mkdir -p /tmp/pkg-build/pkg/usr/share/applications
           mkdir -p /tmp/pkg-build/pkg/usr/share/icons/hicolor/128x128/apps
@@ -159,12 +168,12 @@ jobs:
           cp src-tauri/icons/128x128.png /tmp/pkg-build/pkg/usr/share/icons/hicolor/128x128/apps/instagram-desktop.png
           cp src-tauri/icons/32x32.png /tmp/pkg-build/pkg/usr/share/icons/hicolor/32x32/apps/instagram-desktop.png
 
-          # Generate Arch Linux package metadata (.PKGINFO)
           PKG_SIZE=$(du -sb /tmp/pkg-build/pkg | awk '{print $1}')
           BUILD_DATE=$(date +%s)
+
           cat << EOF > /tmp/pkg-build/pkg/.PKGINFO
 pkgname = instagram-desktop
-pkgver = 1.0.0-1
+pkgver = ${PKG_VER}-1
 pkgdesc = Official Instagram Web Desktop Client with Native Notifications
 url = https://github.com/rootLocalGhost/Instagram-Next
 builddate = ${BUILD_DATE}
@@ -181,7 +190,7 @@ EOF
 
           mkdir -p "${GITHUB_WORKSPACE}/arch-artifacts"
           cd /tmp/pkg-build/pkg
-          tar -c -I 'zstd -19 -T0' -f "${GITHUB_WORKSPACE}/arch-artifacts/instagram-desktop-1.0.0-1-x86_64.pkg.tar.zst" .
+          tar -c -I 'zstd -19 -T0' -f "${GITHUB_WORKSPACE}/arch-artifacts/instagram-desktop-${PKG_VER}-1-x86_64.pkg.tar.zst" .
 
       - name: Upload Arch artifact
         uses: actions/upload-artifact@v4
@@ -225,55 +234,55 @@ EOF
           echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
 
           cat << EOF > release_notes.md
-          ## 📸 Instagram Desktop - Official Web Client
+## 📸 Instagram Desktop - Official Web Client
 
-          A modern, high-performance desktop application for Instagram built with **Tauri v2**, **Solid.js**, **Rust**, **TypeScript**, and **Native CSS**.
+A modern, high-performance desktop application for Instagram built with **Tauri v2**, **Solid.js**, **Rust**, **TypeScript**, and **Native CSS**.
 
-          ---
+---
 
-          ### ✨ Highlights & Features
+### ✨ Highlights & Features
 
-          - 🔔 **First-Class Native Notifications**: Native Windows 10/11 & Linux desktop toast notifications with sound and message previews.
-          - 💬 **Direct Messages Bridge**: Instant toast alerts for new DMs and direct one-click jump to conversation threads.
-          - 🔴 **Unread Badge Counters**: Pulsing notification badges in the custom titlebar and unread count tracker.
-          - 🪟 **System Tray Integration**: Runs silently in the background so you never miss an alert or DM.
-          - 🧭 **Quick Navigation Toolbar**: Fast access to Home Feed, Direct Messages (\`/direct/inbox\`), Explore, and Activity.
-          - 🔍 **Zoom & Viewport Controls**: Quick scale adjustment (\`80%\` – \`150%\`) with \`Ctrl + =\` / \`Ctrl + -\`.
-          - 🌙 **Modern Fluent Theme**: Sleek acrylic titlebar with Instagram signature color gradients and dark/light mode sync.
+- 🔔 **First-Class Native Notifications**: Native Windows 10/11 & Linux desktop toast notifications with sound and message previews.
+- 💬 **Direct Messages Bridge**: Instant toast alerts for new DMs and direct one-click jump to conversation threads.
+- 🔴 **Unread Badge Counters**: Pulsing notification badges in the custom titlebar and unread count tracker.
+- 🪟 **System Tray Integration**: Runs silently in the background so you never miss an alert or DM.
+- 🧭 **Quick Navigation Toolbar**: Fast access to Home Feed, Direct Messages (\`/direct/inbox\`), Explore, and Activity.
+- 🔍 **Zoom & Viewport Controls**: Quick scale adjustment (\`80%\` – \`150%\`) with \`Ctrl + =\` / \`Ctrl + -\`.
+- 🌙 **Modern Fluent Theme**: Sleek acrylic titlebar with Instagram signature color gradients and dark/light mode sync.
 
-          ---
+---
 
-          ### 📦 Download & Installers
+### 📦 Download & Installers
 
-          | Platform | Package Type | File | Description |
-          | :--- | :--- | :--- | :--- |
-          | 🪟 **Windows** | Setup Installer (\`.exe\`) | \`Instagram Desktop_*_x64-setup.exe\` | Standard Windows NSIS installer |
-          | 🪟 **Windows** | MSI Package (\`.msi\`) | \`Instagram Desktop_*_x64_en-US.msi\` | Windows Installer package |
-          | 🪟 **Windows** | Portable Zip (\`.zip\`) | \`Instagram-Desktop-Windows-Portable.zip\` | No installation required |
-          | 🐧 **Linux** | Universal AppImage | \`Instagram Desktop_*_amd64.AppImage\` | Run anywhere on Linux (\`chmod +x\`) |
-          | 🐧 **Debian / Ubuntu** | Debian Package (\`.deb\`) | \`instagram-desktop_*_amd64.deb\` | \`sudo dpkg -i ...\` |
-          | 🐧 **Fedora / RHEL** | RPM Package (\`.rpm\`) | \`instagram-desktop-*_x86_64.rpm\` | \`sudo dnf install ...\` |
-          | 🏹 **Arch Linux** | Arch Package (\`.pkg.tar.zst\`) | \`instagram-desktop-*-x86_64.pkg.tar.zst\` | \`sudo pacman -U ...\` |
+| Platform | Package Type | File | Description |
+| :--- | :--- | :--- | :--- |
+| 🪟 **Windows** | Setup Installer (\`.exe\`) | \`Instagram Desktop_*_x64-setup.exe\` | Standard Windows NSIS installer |
+| 🪟 **Windows** | MSI Package (\`.msi\`) | \`Instagram Desktop_*_x64_en-US.msi\` | Windows Installer package |
+| 🪟 **Windows** | Portable Zip (\`.zip\`) | \`Instagram-Desktop-Windows-Portable.zip\` | No installation required |
+| 🐧 **Linux** | Universal AppImage | \`Instagram Desktop_*_amd64.AppImage\` | Run anywhere on Linux (\`chmod +x\`) |
+| 🐧 **Debian / Ubuntu** | Debian Package (\`.deb\`) | \`instagram-desktop_*_amd64.deb\` | \`sudo dpkg -i ...\` |
+| 🐧 **Fedora / RHEL** | RPM Package (\`.rpm\`) | \`instagram-desktop-*_x86_64.rpm\` | \`sudo dnf install ...\` |
+| 🏹 **Arch Linux** | Arch Package (\`.pkg.tar.zst\`) | \`instagram-desktop-*-x86_64.pkg.tar.zst\` | \`sudo pacman -U ...\` |
 
-          ---
+---
 
-          ### 🏹 Arch Linux / Manjaro Quick Install
-          \`\`\`bash
-          # Using the prebuilt Arch package:
-          sudo pacman -U instagram-desktop-*-x86_64.pkg.tar.zst
+### 🏹 Arch Linux / Manjaro Quick Install
+\`\`\`bash
+# Using the prebuilt Arch package:
+sudo pacman -U instagram-desktop-*-x86_64.pkg.tar.zst
 
-          # Or using the included PKGBUILD:
-          cd packaging/arch && makepkg -si
-          \`\`\`
+# Or using the included PKGBUILD:
+cd packaging/arch && makepkg -si
+\`\`\`
 
-          ---
+---
 
-          ### 🔑 SHA-256 Checksums
-          Refer to \`SHA256SUMS.txt\` attached below to verify file integrity.
+### 🔑 SHA-256 Checksums
+Refer to \`SHA256SUMS.txt\` attached below to verify file integrity.
 
-          ---
-          **Full Changelog**: https://github.com/${{ github.repository }}/commits/\${TAG_NAME}
-          EOF
+---
+**Full Changelog**: https://github.com/${{ github.repository }}/commits/${TAG_NAME}
+EOF
 
       - name: Publish Release to GitHub
         uses: softprops/action-gh-release@v2
@@ -281,8 +290,8 @@ EOF
           tag_name: ${{ steps.release_notes.outputs.tag_name }}
           name: Instagram Desktop ${{ steps.release_notes.outputs.tag_name }}
           body_path: release_notes.md
-          draft: false
-          prerelease: false
+          draft: ${{ inputs.draft || false }}
+          prerelease: ${{ inputs.prerelease || false }}
           files: |
             all-artifacts/*
         env:
