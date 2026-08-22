@@ -194,10 +194,11 @@ jobs:
         run: |
           TAG_NAME="${{ github.ref_name }}"
           if [ -z "$TAG_NAME" ] || [ "$TAG_NAME" = "main" ]; then
-            TAG_NAME="${{ github.event.inputs.version || 'v1.0.0' }}"
+            TAG_NAME="${{ inputs.version || 'v1.0.1' }}"
           fi
+          echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
 
-          cat << 'EOF' > release_notes.md
+          cat << EOF > release_notes.md
           ## 📸 Instagram Desktop - Official Web Client
 
           A modern, high-performance desktop application for Instagram built with **Tauri v2**, **Solid.js**, **Rust**, **TypeScript**, and **Native CSS**.
@@ -210,8 +211,8 @@ jobs:
           - 💬 **Direct Messages Bridge**: Instant toast alerts for new DMs and direct one-click jump to conversation threads.
           - 🔴 **Unread Badge Counters**: Pulsing notification badges in the custom titlebar and unread count tracker.
           - 🪟 **System Tray Integration**: Runs silently in the background so you never miss an alert or DM.
-          - 🧭 **Quick Navigation Toolbar**: Fast access to Home Feed, Direct Messages (`/direct/inbox`), Explore, and Activity.
-          - 🔍 **Zoom & Viewport Controls**: Quick scale adjustment (`80%` – `150%`) with `Ctrl + =` / `Ctrl + -`.
+          - 🧭 **Quick Navigation Toolbar**: Fast access to Home Feed, Direct Messages (\`/direct/inbox\`), Explore, and Activity.
+          - 🔍 **Zoom & Viewport Controls**: Quick scale adjustment (\`80%\` – \`150%\`) with \`Ctrl + =\` / \`Ctrl + -\`.
           - 🌙 **Modern Fluent Theme**: Sleek acrylic titlebar with Instagram signature color gradients and dark/light mode sync.
 
           ---
@@ -220,42 +221,42 @@ jobs:
 
           | Platform | Package Type | File | Description |
           | :--- | :--- | :--- | :--- |
-          | 🪟 **Windows** | Setup Installer (`.exe`) | `Instagram Desktop_*_x64-setup.exe` | Standard Windows NSIS installer |
-          | 🪟 **Windows** | MSI Package (`.msi`) | `Instagram Desktop_*_x64_en-US.msi` | Windows Installer package |
-          | 🪟 **Windows** | Portable Zip (`.zip`) | `Instagram-Desktop-Windows-Portable.zip` | No installation required |
-          | 🐧 **Linux** | Universal AppImage | `Instagram Desktop_*_amd64.AppImage` | Run anywhere on Linux (`chmod +x`) |
-          | 🐧 **Debian / Ubuntu** | Debian Package (`.deb`) | `instagram-desktop_*_amd64.deb` | `sudo dpkg -i ...` |
-          | 🐧 **Fedora / RHEL** | RPM Package (`.rpm`) | `instagram-desktop-*_x86_64.rpm` | `sudo dnf install ...` |
-          | 🏹 **Arch Linux** | Arch Package (`.pkg.tar.zst`) | `instagram-desktop-*-x86_64.pkg.tar.zst` | `sudo pacman -U ...` |
+          | 🪟 **Windows** | Setup Installer (\`.exe\`) | \`Instagram Desktop_*_x64-setup.exe\` | Standard Windows NSIS installer |
+          | 🪟 **Windows** | MSI Package (\`.msi\`) | \`Instagram Desktop_*_x64_en-US.msi\` | Windows Installer package |
+          | 🪟 **Windows** | Portable Zip (\`.zip\`) | \`Instagram-Desktop-Windows-Portable.zip\` | No installation required |
+          | 🐧 **Linux** | Universal AppImage | \`Instagram Desktop_*_amd64.AppImage\` | Run anywhere on Linux (\`chmod +x\`) |
+          | 🐧 **Debian / Ubuntu** | Debian Package (\`.deb\`) | \`instagram-desktop_*_amd64.deb\` | \`sudo dpkg -i ...\` |
+          | 🐧 **Fedora / RHEL** | RPM Package (\`.rpm\`) | \`instagram-desktop-*_x86_64.rpm\` | \`sudo dnf install ...\` |
+          | 🏹 **Arch Linux** | Arch Package (\`.pkg.tar.zst\`) | \`instagram-desktop-*-x86_64.pkg.tar.zst\` | \`sudo pacman -U ...\` |
 
           ---
 
           ### 🏹 Arch Linux / Manjaro Quick Install
-          ```bash
+          \`\`\`bash
           # Using the prebuilt Arch package:
           sudo pacman -U instagram-desktop-*-x86_64.pkg.tar.zst
 
           # Or using the included PKGBUILD:
           cd packaging/arch && makepkg -si
-          ```
+          \`\`\`
 
           ---
 
           ### 🔑 SHA-256 Checksums
-          Refer to `SHA256SUMS.txt` attached below to verify file integrity.
+          Refer to \`SHA256SUMS.txt\` attached below to verify file integrity.
 
           ---
-          **Full Changelog**: https://github.com/${{ github.repository }}/commits/${TAG_NAME}
+          **Full Changelog**: https://github.com/${{ github.repository }}/commits/\${TAG_NAME}
           EOF
 
       - name: Publish Release to GitHub
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name || github.event.inputs.version || 'v1.0.0' }}
-          name: 'Instagram Desktop ${{ github.ref_name || github.event.inputs.version || 'v1.0.0' }}'
+          tag_name: ${{ steps.release_notes.outputs.tag_name }}
+          name: Instagram Desktop ${{ steps.release_notes.outputs.tag_name }}
           body_path: release_notes.md
-          draft: ${{ github.event.inputs.draft || false }}
-          prerelease: ${{ github.event.inputs.prerelease || false }}
+          draft: false
+          prerelease: false
           files: |
             all-artifacts/*
         env:
