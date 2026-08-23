@@ -1,6 +1,6 @@
 [package]
 name = "instagram-desktop"
-version = "1.0.7"
+version = "1.0.8"
 description = "Instagram Desktop Windows Client"
 authors = ["localghost"]
 edition = "2021"
