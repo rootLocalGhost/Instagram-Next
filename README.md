@@ -47,20 +47,18 @@ Prebuilt installers are generated automatically on every release via GitHub Acti
   ```
 
 ### 🏹 Arch Linux / Manjaro / EndeavourOS
-- **Using Prebuilt Package (`.pkg.tar.zst`)**:
-  ```bash
-  sudo pacman -U instagram-desktop-*-x86_64.pkg.tar.zst
-  ```
-- **Using PKGBUILD script**:
-  ```bash
-  cd packaging/arch
-  makepkg -si
-  ```
-- **Using automated installer script**:
-  ```bash
-  chmod +x packaging/arch/install-arch.sh
-  ./packaging/arch/install-arch.sh
-  ```
+
+#### ⚡ One-Command Instant Install (Zero compilation / No build tools needed):
+```bash
+curl -fsSL https://raw.githubusercontent.com/rootLocalGhost/Instagram-Next/main/packaging/arch/install-arch.sh | bash
+```
+*(Or run `./packaging/arch/install-arch.sh` from the repository)*
+
+#### 📦 Using PKGBUILD with makepkg:
+```bash
+cd packaging/arch
+makepkg -si
+```
 
 ---
 
