@@ -35,6 +35,22 @@ jobs:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
+      - name: 🏷️ Set Release Version & Tag
+        id: vars
+        shell: bash
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG="${{ github.ref_name }}"
+          elif [ -n "${{ inputs.version }}" ]; then
+            TAG="${{ inputs.version }}"
+          else
+            TAG="v1.0.0"
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Using TAG: ${TAG}, VERSION: ${VERSION}"
+
       - name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -71,8 +87,7 @@ jobs:
       - name: 🏷️ Sync Project Version with Release Tag
         shell: bash
         run: |
-          RAW_TAG="${{ github.ref_type == 'tag' && github.ref_name || inputs.version || '1.0.0' }}"
-          VERSION="${RAW_TAG#v}"
+          VERSION="${{ steps.vars.outputs.version }}"
           echo "Synchronizing project files to release version: $VERSION"
 
           # Update package.json
@@ -101,10 +116,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version || 'v1.0.0' }}
-          releaseName: 'Instagram Desktop ${{ github.ref_type == 'tag' && github.ref_name || inputs.version || 'v1.0.0' }} 🚀'
+          tagName: ${{ steps.vars.outputs.tag }}
+          releaseName: 'Instagram Desktop ${{ steps.vars.outputs.tag }} 🚀'
           releaseBody: |
-            # 🚀 Instagram Desktop Release `${{ github.ref_type == 'tag' && github.ref_name || inputs.version || 'v1.0.0' }}`
+            # 🚀 Instagram Desktop Release `${{ steps.vars.outputs.tag }}`
 
             Welcome to the new release of **Instagram Desktop**! A fast, lightweight native desktop client for Instagram powered by **Tauri v2**, **SolidJS**, and **Rust**.
 
@@ -131,7 +146,8 @@ jobs:
             - **`Instagram Desktop_*_amd64.AppImage`**: Portable Linux AppImage (Works across all distributions).
             - **`instagram-desktop_*_amd64.deb`**: Debian / Ubuntu package (`sudo dpkg -i instagram-desktop_*.deb`).
             - **`instagram-desktop-*_x86_64.rpm`**: Fedora / RHEL RPM package.
-            - **Arch Linux**: Build and install directly using `packaging/arch/install-arch.sh` or `packaging/arch/PKGBUILD` via `makepkg -si`.
+            - **`instagram-desktop-*-1-x86_64.pkg.tar.zst`**: Native Arch Linux package.
+            - **Arch Linux One-Command Installer**: `curl -fsSL https://raw.githubusercontent.com/rootLocalGhost/Instagram-Next/main/packaging/arch/install-arch.sh | bash`
 
             ---
 
@@ -146,8 +162,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          RAW_TAG="${{ github.ref_type == 'tag' && github.ref_name || inputs.version || '1.0.0' }}"
-          VERSION="${RAW_TAG#v}"
+          VERSION="${{ steps.vars.outputs.version }}"
           PKG_NAME="instagram-desktop"
           ARCH_PKG_NAME="${PKG_NAME}-${VERSION}-1-x86_64.pkg.tar.zst"
 
@@ -195,4 +210,4 @@ conflict = ${PKG_NAME}-bin
 EOF
 
           (cd "${PKG_DIR}" && tar -c --zstd -f "${GITHUB_WORKSPACE}/${ARCH_PKG_NAME}" .PKGINFO usr)
-          gh release upload "${{ github.ref_type == 'tag' && github.ref_name || inputs.version || 'v1.0.0' }}" "${GITHUB_WORKSPACE}/${ARCH_PKG_NAME}" --clobber
+          gh release upload "${{ steps.vars.outputs.tag }}" "${GITHUB_WORKSPACE}/${ARCH_PKG_NAME}" --clobber
