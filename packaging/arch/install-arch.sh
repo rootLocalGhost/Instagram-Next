@@ -22,13 +22,19 @@ fi
 echo "📦 Ensuring runtime dependencies are installed..."
 sudo pacman -S --needed --noconfirm webkit2gtk-4.1 libayatana-appindicator gtk3 openssl hicolor-icon-theme cairo gdk-pixbuf2 glib2 pango
 
+# 2. Clean up any unmanaged legacy files from previous manual installs to avoid file conflicts
+echo "🧹 Removing legacy unmanaged files (if any)..."
+sudo rm -f /usr/share/applications/${BIN_NAME}.desktop \
+           /usr/share/icons/hicolor/*/apps/${BIN_NAME}.png \
+           /usr/local/bin/${BIN_NAME} 2>/dev/null || true
+
 TEMP_DIR="$(mktemp -d /tmp/instagram-install.XXXXXX)"
 trap 'rm -rf "${TEMP_DIR}"' EXIT
 
 echo "📡 Querying latest release from GitHub (${REPO})..."
 RELEASE_JSON=$(curl -sL "https://api.github.com/repos/${REPO}/releases/latest" || true)
 
-# 2. Priority 1: Check for pre-built .pkg.tar.zst package
+# 3. Priority 1: Check for pre-built .pkg.tar.zst package
 ZST_URL=$(echo "${RELEASE_JSON}" | grep -o -E 'https://[^\"]+\.pkg\.tar\.zst' | head -n 1 || true)
 
 if [ -n "${ZST_URL}" ]; then
@@ -48,7 +54,7 @@ if [ -n "${ZST_URL}" ]; then
     exit 0
 fi
 
-# 3. Priority 2: Fallback to pre-built AppImage extraction (zero compilation needed)
+# 4. Priority 2: Fallback to pre-built AppImage extraction (zero compilation needed)
 APPIMAGE_URL=$(echo "${RELEASE_JSON}" | grep -o -E 'https://[^\"]+\.AppImage' | head -n 1 || true)
 
 if [ -n "${APPIMAGE_URL}" ]; then
