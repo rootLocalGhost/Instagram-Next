@@ -1,12 +1,11 @@
-# Maintainer: localghost
-# PKGBUILD for Instagram Desktop (Tauri v2 + SolidJS + Rust)
-
+# Maintainer: rootLocalGhost <rootlocalghost@gmail.com>
 pkgname=instagram-desktop-bin
-pkgver=1.0.0
+_pkgname=Instagram-Next
+pkgver=1.0.6
 pkgrel=1
-pkgdesc="Official Instagram Web Desktop Client with Native Notifications and System Tray"
+pkgdesc="Official Instagram Web Desktop Client with Native Notifications (pre-built binary)"
 arch=('x86_64')
-url="https://github.com/localghost/instagram-desktop"
+url="https://github.com/rootLocalGhost/Instagram-Next"
 license=('MIT')
 depends=(
     'webkit2gtk-4.1'
@@ -21,10 +20,10 @@ depends=(
 )
 provides=('instagram-desktop')
 conflicts=('instagram-desktop')
+options=('!strip')
 
-# Source either AppImage or binary from GitHub Releases
 _appimage="Instagram.Desktop_${pkgver}_amd64.AppImage"
-source_x86_64=("https://github.com/localghost/instagram-desktop/releases/download/v${pkgver}/${_appimage}"
+source_x86_64=("https://github.com/rootLocalGhost/Instagram-Next/releases/download/v${pkgver}/${_appimage}"
                "instagram-desktop.desktop")
 sha256sums_x86_64=('SKIP'
                    'SKIP')
@@ -45,10 +44,12 @@ package() {
     install -Dm644 "${srcdir}/instagram-desktop.desktop" "${pkgdir}/usr/share/applications/instagram-desktop.desktop"
 
     # Install icons
-    install -Dm644 "squashfs-root/usr/share/icons/hicolor/128x128/apps/instagram-desktop.png" \
-        "${pkgdir}/usr/share/icons/hicolor/128x128/apps/instagram-desktop.png"
     install -Dm644 "squashfs-root/usr/share/icons/hicolor/32x32/apps/instagram-desktop.png" \
-        "${pkgdir}/usr/share/icons/hicolor/32x32/apps/instagram-desktop.png"
+        "${pkgdir}/usr/share/icons/hicolor/32x32/apps/instagram-desktop.png" 2>/dev/null || true
+    install -Dm644 "squashfs-root/usr/share/icons/hicolor/128x128/apps/instagram-desktop.png" \
+        "${pkgdir}/usr/share/icons/hicolor/128x128/apps/instagram-desktop.png" 2>/dev/null || true
     install -Dm644 "squashfs-root/usr/share/icons/hicolor/256x256@2/apps/instagram-desktop.png" \
         "${pkgdir}/usr/share/icons/hicolor/256x256@2/apps/instagram-desktop.png" 2>/dev/null || true
+    install -Dm644 "squashfs-root/usr/share/icons/hicolor/512x512/apps/instagram-desktop.png" \
+        "${pkgdir}/usr/share/icons/hicolor/512x512/apps/instagram-desktop.png" 2>/dev/null || true
 }
