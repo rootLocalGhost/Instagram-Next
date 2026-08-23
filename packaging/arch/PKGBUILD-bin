@@ -1,0 +1,53 @@
+# Maintainer: rootLocalGhost <rootlocalghost@gmail.com>
+pkgname=instagram-desktop-bin
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="Official Instagram Web Desktop Client with Native Notifications (pre-built binary)"
+arch=('x86_64')
+url="https://github.com/rootLocalGhost/Instagram-Next"
+license=('MIT')
+depends=(
+    'webkit2gtk-4.1'
+    'gtk3'
+    'libayatana-appindicator'
+    'openssl'
+    'cairo'
+    'gdk-pixbuf2'
+    'glib2'
+    'pango'
+    'hicolor-icon-theme'
+)
+provides=('instagram-desktop')
+conflicts=('instagram-desktop')
+
+_appimage="Instagram.Desktop_${pkgver}_amd64.AppImage"
+source_x86_64=("https://github.com/rootLocalGhost/Instagram-Next/releases/download/v${pkgver}/${_appimage}"
+               "instagram-desktop.desktop")
+sha256sums_x86_64=('SKIP'
+                   'SKIP')
+
+prepare() {
+    cd "${srcdir}"
+    chmod +x "${_appimage}"
+    ./"${_appimage}" --appimage-extract >/dev/null 2>&1 || true
+}
+
+package() {
+    cd "${srcdir}"
+
+    # Install binary
+    install -Dm755 "squashfs-root/usr/bin/instagram-desktop" "${pkgdir}/usr/bin/instagram-desktop"
+
+    # Install desktop entry
+    install -Dm644 "${srcdir}/instagram-desktop.desktop" "${pkgdir}/usr/share/applications/instagram-desktop.desktop"
+
+    # Install icons
+    install -Dm644 "squashfs-root/usr/share/icons/hicolor/32x32/apps/instagram-desktop.png" \
+        "${pkgdir}/usr/share/icons/hicolor/32x32/apps/instagram-desktop.png" 2>/dev/null || true
+    install -Dm644 "squashfs-root/usr/share/icons/hicolor/128x128/apps/instagram-desktop.png" \
+        "${pkgdir}/usr/share/icons/hicolor/128x128/apps/instagram-desktop.png" 2>/dev/null || true
+    install -Dm644 "squashfs-root/usr/share/icons/hicolor/256x256@2/apps/instagram-desktop.png" \
+        "${pkgdir}/usr/share/icons/hicolor/256x256@2/apps/instagram-desktop.png" 2>/dev/null || true
+    install -Dm644 "squashfs-root/usr/share/icons/hicolor/512x512/apps/instagram-desktop.png" \
+        "${pkgdir}/usr/share/icons/hicolor/512x512/apps/instagram-desktop.png" 2>/dev/null || true
+}
